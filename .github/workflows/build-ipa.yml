@@ -1,0 +1,102 @@
+name: Build IPA (device, unsigned)
+
+# Ручной запуск: Actions -> Build IPA -> Run workflow.
+# Подпись не ставится — это нормально: .ipa рассчитан на AltStore / Sideloadly /
+# TrollStore, они переподпишут его вашим Apple ID прямо при установке на телефон.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gram_api:
+        description: "Адрес сервера API (https://домен); пусто = переменная репо GRAM_API"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      # Собирает server/game/gram.html из part1.html + part2.js и вшивает в него
+      # адрес API (window.GRAM_API) и иконку. Адрес берётся из input'а запуска,
+      # иначе из переменной репозитория GRAM_API; пусто = игрок задаст его
+      # в настройках приложения вручную (ключ localStorage gg_api).
+      - name: Build gram.html (шьёт GRAM_API)
+        env:
+          GRAM_API: ${{ inputs.gram_api || vars.GRAM_API || '' }}
+        run: python3 build_client.py "$GRAM_API"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Нативный Xcode-проект в репозитории не хранится — Capacitor генерирует
+      # его из capacitor.config.json прямо на раннере (appId com.gramgifts.app).
+      - name: Generate the iOS project
+        working-directory: apps/ios
+        run: |
+          set -euo pipefail
+          npm install
+          mkdir -p www
+          cp ../../server/game/gram.html www/
+          npx cap add ios
+
+          # Иконка приложения: один файл 1024x1024 вместо всей сетки размеров —
+          # Xcode 14+ такое умеет, для сиделоада этого достаточно.
+          ICON=../../brand/icon-1024.png
+          SET=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          if [ -f "$ICON" ]; then
+            rm -f "$SET"/*.png
+            cp "$ICON" "$SET/icon-1024.png"
+            cat > "$SET/Contents.json" <<'EOF'
+          {
+            "images": [
+              { "filename": "icon-1024.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" }
+            ],
+            "info": { "author": "xcode", "version": 1 }
+          }
+          EOF
+          fi
+
+          npx cap sync ios
+
+      # CODE_SIGNING_ALLOWED=NO — собираем неподписанное приложение. Структура
+      # .app при этом валидная, и любой сиделоадер переподпишет её на месте.
+      - name: Build unsigned app (device arm64)
+        working-directory: apps/ios/ios/App
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      # .ipa = zip с каталогом Payload/<App>.app — ровно то, что ждут
+      # AltStore / Sideloadly / TrollStore.
+      - name: Package .ipa
+        run: |
+          set -euo pipefail
+          APP=$(find "$PWD/apps/ios/ios/App/build" -type d -name 'App.app' -path '*Release-iphoneos*' | head -n 1)
+          test -n "$APP"
+          rm -rf stage
+          mkdir -p stage/Payload
+          cp -R "$APP" stage/Payload/
+          (cd stage && zip -qry ../GramGifts.ipa Payload)
+          ls -lh GramGifts.ipa
+
+      - name: Upload IPA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GramGifts-ipa
+          path: GramGifts.ipa
+          if-no-files-found: warn
+          retention-days: 14

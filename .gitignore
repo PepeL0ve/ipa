@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+dist/
+build/
+stage/
+*.ipa
+
+# Генерируется при сборке (CI или локально)
+apps/ios/ios/
+apps/ios/www/gram.html
+server/game/gram.html
+apps/desktop/gram.html
+
+# Конфиг с PIN — только локально, в репозиторий не попадает
+apps/desktop/config.json

@@ -1,0 +1,8 @@
+{
+  "appId": "com.gramgifts.app",
+  "appName": "Gram Gifts",
+  "webDir": "www",
+  "backgroundColor": "#0b0f17",
+  "plugins": { "CapacitorHttp": { "enabled": true } },
+  "ios": { "contentInset": "never", "limitsNavigationsToAppBoundDomains": false }
+}

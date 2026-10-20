@@ -1,0 +1,16 @@
+{
+  "name": "gram-gifts-desktop",
+  "version": "3.0.0",
+  "description": "Gram Gifts",
+  "main": "main.js",
+  "author": "Gram Gifts",
+  "scripts": { "start": "electron .", "dist": "electron-builder --win portable --x64" },
+  "devDependencies": { "electron": "33.2.1", "electron-builder": "25.1.8" },
+  "build": {
+    "appId": "com.gramgifts.desktop",
+    "productName": "Gram Gifts",
+    "files": ["main.js", "preload.js", "gram.html", "config.json", "icon.png"],
+    "win": { "target": "portable", "icon": "icon.ico" },
+    "portable": { "artifactName": "GramGifts.exe" }
+  }
+}
